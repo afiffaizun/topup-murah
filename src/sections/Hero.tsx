@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
-import { Check } from 'lucide-react'
+import { Wallet } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { games } from '@/data/games'
-import { nominalsByGame, paymentMethods as staticMethods } from '@/data/transaction'
-import { fetchCatalog, postTopup, formatRp, type ApiGame, type Order } from '@/lib/api'
+import { nominalsByGame } from '@/data/transaction'
+import { fetchBalance, fetchCatalog, postTopup, formatRp, type ApiGame, type Order } from '@/lib/api'
+import { openSaldoModal } from '@/sections/SaldoModal'
 import { cn } from '@/lib/utils'
 import heroImg from '@/assets/hero.png'
 
@@ -28,15 +29,20 @@ function statusStyle(status: string): string {
 
 export function Hero() {
   const [catalog, setCatalog] = useState<ApiGame[]>(FALLBACK_GAMES);
-  const [methods, setMethods] = useState<string[]>(staticMethods.map((m) => m.id));
+  const [balance, setBalance] = useState<number | null>(null);
   const [apiDown, setApiDown] = useState(false);
   const [gameId, setGameId] = useState(FALLBACK_GAMES[0].id);
   const [playerId, setPlayerId] = useState('');
   const [nominalId, setNominalId] = useState('');
-  const [methodId, setMethodId] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<Order | null>(null);
   const [error, setError] = useState('');
+
+  const loadBalance = () => {
+    fetchBalance()
+      .then((data) => setBalance(data.balance))
+      .catch(() => {});
+  };
 
   useEffect(() => {
     fetchCatalog()
@@ -45,18 +51,19 @@ export function Hero() {
           setCatalog(data.games);
           setGameId(data.games[0].id);
         }
-        if (data.methods.length > 0) setMethods(data.methods);
       })
       .catch(() => setApiDown(true));
+    loadBalance();
+    const onRefresh = () => loadBalance();
+    window.addEventListener("balance:refresh", onRefresh);
+    return () => window.removeEventListener("balance:refresh", onRefresh);
   }, []);
 
   const game = catalog.find((g) => g.id === gameId) ?? catalog[0];
   const activeNominals = game?.nominals ?? [];
   const nominal = activeNominals.find((n) => n.id === nominalId);
-  const canSubmit = playerId.trim().length > 0 && nominalId !== '' && methodId !== '' && !submitting;
-
-  const methodLabel = (id: string) =>
-    staticMethods.find((m) => m.id === id)?.label ?? id.toUpperCase();
+  const canSubmit = playerId.trim().length > 0 && nominalId !== '' && !submitting;
+  const insufficient = balance !== null && nominal !== undefined && balance < nominal.amount;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -65,9 +72,10 @@ export function Hero() {
     setError('');
     setResult(null);
     try {
-      const order = await postTopup({ game_id: gameId, nominal_id: nominalId, player_id: playerId.trim(), metode: methodId });
+      const order = await postTopup({ game_id: gameId, nominal_id: nominalId, player_id: playerId.trim() });
       setResult(order);
       window.dispatchEvent(new CustomEvent("orders:refresh"));
+      window.dispatchEvent(new CustomEvent("balance:refresh"));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Transaksi gagal. Coba lagi.");
     } finally {
@@ -156,27 +164,20 @@ export function Hero() {
               </div>
             </div>
 
-            <div>
-              <span className="mb-1 block text-[11px] font-bold uppercase tracking-wide">Pembayaran</span>
-              <div className="flex flex-wrap gap-1.5">
-                {methods.map((m) => (
-                  <button
-                    key={m}
-                    type="button"
-                    onClick={() => setMethodId(m)}
-                    className={cn(
-                      'flex items-center gap-1 rounded border-2 px-2.5 py-1 text-xs font-bold transition-all',
-                      methodId === m
-                        ? 'border-ink bg-pop-cyan shadow-ink-sm'
-                        : 'border-ink/15 bg-white hover:border-ink',
-                    )}
-                  >
-                    {methodId === m && <Check className="size-3.5" strokeWidth={3} />}
-                    {methodLabel(m)}
-                  </button>
-                ))}
-              </div>
+            <div className="flex items-center justify-between rounded border-2 border-ink bg-pop-cyan px-3 py-2 shadow-ink-sm">
+              <span className="flex items-center gap-1.5 text-xs font-bold">
+                <Wallet className="size-3.5" /> Bayar dengan Saldo
+              </span>
+              <span className="text-xs font-bold">
+                {balance === null ? "Rp 150.000" : formatRp(balance)}
+              </span>
             </div>
+            {insufficient && nominal && (
+              <p className="rounded border-2 border-ink bg-pop-magenta px-3 py-1.5 text-center text-xs font-bold text-white">
+                Saldo tidak cukup untuk {nominal.label}.{" "}
+                <button type="button" onClick={openSaldoModal} className="underline">Top up saldo dulu</button>
+              </p>
+            )}
 
             <Button type="submit" className="w-full" disabled={!canSubmit}>
               {submitting ? 'Memproses...' : nominal ? `Bayar • ${formatRp(nominal.amount)}` : 'Bayar'}

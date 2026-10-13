@@ -1,7 +1,6 @@
 # Logs
 logs
-*.log
-npm-debug.log*
+*.lognpm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
@@ -11,6 +10,8 @@ node_modules
 dist
 dist-ssr
 *.local
+__pycache__/
+*.pyc
 
 # Editor directories and files
 .vscode/*

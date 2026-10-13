@@ -61,7 +61,7 @@ export const nominalsByGame: Record<string, Nominal[]> = {
   ],
 }
 
-// Sesuai PRD FR-05: hanya metode ini yang diterima Payment Service.
+// E-wallet dipakai khusus untuk isi saldo (pembelian item hanya pakai saldo).
 export const paymentMethods: PaymentMethod[] = [
   { id: 'qris', label: 'QRIS' },
   { id: 'gopay', label: 'GoPay' },

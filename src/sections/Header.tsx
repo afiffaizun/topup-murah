@@ -1,7 +1,33 @@
-import { Wallet } from 'lucide-react'
+import { useCallback, useEffect, useState } from 'react'
+import { Plus, Wallet } from 'lucide-react'
 import { images } from '@/data/images'
+import { fetchBalance } from '@/lib/api'
+import { openSaldoModal } from '@/sections/SaldoModal'
+
+function formatRp(amount: number): string {
+  return `Rp ${amount.toLocaleString("id-ID")}`
+}
 
 export function Header() {
+  const [balance, setBalance] = useState<number | null>(null);
+
+  const load = useCallback(() => {
+    fetchBalance()
+      .then((data) => setBalance(data.balance))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    load();
+    const timer = setInterval(load, 10000);
+    const onRefresh = () => load();
+    window.addEventListener("balance:refresh", onRefresh);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener("balance:refresh", onRefresh);
+    };
+  }, [load]);
+
   return (
     <header className="fixed inset-x-0 top-0 z-50 border-b-2 border-ink bg-white">
       <div className="mx-auto flex h-16 w-full items-center justify-between gap-6 px-4 sm:px-8">
@@ -12,11 +38,20 @@ export function Header() {
           </a>
         </div>
 
-        <div className="flex shrink-0 items-center gap-4">
+        <div className="flex shrink-0 items-center gap-2">
           <div className="hidden items-center gap-1 rounded border-2 border-ink bg-pop-cyan px-4 py-1.5 shadow-ink sm:flex">
             <Wallet className="size-3.5" />
-            <span className="whitespace-nowrap text-[13px] font-bold tracking-[0.04em]">Saldo: Rp 150.000</span>
+            <span className="whitespace-nowrap text-[13px] font-bold tracking-[0.04em]">
+              Saldo: {balance === null ? "Rp 150.000" : formatRp(balance)}
+            </span>
           </div>
+          <button
+            type="button"
+            onClick={openSaldoModal}
+            className="flex items-center gap-1 rounded border-2 border-ink bg-pop-yellow px-3 py-1.5 text-[13px] font-bold shadow-ink-sm transition-transform hover:-translate-x-px hover:-translate-y-px"
+          >
+            <Plus className="size-3.5" strokeWidth={3} /> Top Up
+          </button>
           <a href="#" className="flex items-center justify-center rounded-full border-2 border-ink p-0.5 shadow-ink-sm transition-transform hover:-translate-x-px hover:-translate-y-px">
             <img src={images.profile} alt="Profile" className="size-8 rounded-full object-cover" />
           </a>

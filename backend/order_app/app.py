@@ -19,7 +19,8 @@ RABBIT_PASS = os.environ.get("RABBITMQ_PASS", "guest")
 PAYMENT_URL = os.environ.get("PAYMENT_URL", "http://localhost:8000")
 EXCHANGE = "order_events"
 
-ALLOWED_METHODS = {"qris", "gopay", "ovo", "dana", "shopeepay"}
+# Pembayaran hanya memakai saldo (pemegang saldo: payment_service via RPC).
+METODE = "saldo"
 
 # Katalog server = sumber kebenaran harga (FR-02). Hanya 4 game sesuai PRD.
 CATALOG = {
@@ -103,9 +104,59 @@ def publish_event(event: dict) -> bool:
         return False
 
 
+def rpc_proxy():
+    """Buat proxy RPC dengan timeout eksplisit (pemanggil wajib restore)."""
+    proxy = ServerProxy(PAYMENT_URL, allow_none=True)
+    old_timeout = socket.getdefaulttimeout()
+    socket.setdefaulttimeout(8)
+    return proxy, old_timeout
+
+
+def rpc_close(old_timeout):
+    socket.setdefaulttimeout(old_timeout)
+
+
 @app.get("/api/health")
 def health():
     return jsonify({"status": "ok"})
+
+
+@app.get("/api/balance")
+def balance():
+    try:
+        proxy, old = rpc_proxy()
+        try:
+            bal = proxy.get_balance()
+            pkgs = proxy.get_paket_saldo()
+        finally:
+            rpc_close(old)
+        return jsonify({"balance": int(bal.get("balance", 0)), "packages": pkgs.get("packages", [])})
+    except Exception as e:  # noqa: BLE001
+        print(f"[order_app] balance RPC tak terjangkau: {e}", flush=True)
+        return jsonify({"error": "Layanan saldo sedang tidak dapat dihubungi."}), 502
+
+
+@app.post("/api/saldo/topup")
+def saldo_topup():
+    data = request.get_json(silent=True) or {}
+    package_id = str(data.get("package_id", "")).strip()
+    metode = str(data.get("metode", "")).strip().lower()
+    if not package_id:
+        return jsonify({"error": "Pilih paket saldo terlebih dahulu."}), 400
+    if metode not in {"qris", "gopay", "ovo", "dana", "shopeepay"}:
+        return jsonify({"error": "Pilih e-wallet terlebih dahulu."}), 400
+    try:
+        proxy, old = rpc_proxy()
+        try:
+            result = proxy.topup_saldo(package_id, metode)
+        finally:
+            rpc_close(old)
+    except Exception as e:  # noqa: BLE001
+        print(f"[order_app] topup saldo RPC tak terjangkau: {e}", flush=True)
+        return jsonify({"error": "Layanan saldo sedang tidak dapat dihubungi. Coba lagi."}), 502
+    if str(result.get("status")) != "SUCCESS":
+        return jsonify({"error": str(result.get("message", "Paket tidak valid."))}), 400
+    return jsonify(result), 200
 
 
 @app.get("/api/catalog")
@@ -119,7 +170,7 @@ def catalog():
         }
         for g in CATALOG.values()
     ]
-    return jsonify({"games": games, "methods": sorted(ALLOWED_METHODS)})
+    return jsonify({"games": games, "methods": [METODE]})
 
 
 @app.get("/api/orders")
@@ -133,7 +184,7 @@ def topup():
     game_id = str(data.get("game_id", "")).strip()
     nominal_id = str(data.get("nominal_id", "")).strip()
     player_id = str(data.get("player_id", "")).strip()
-    metode = str(data.get("metode", "")).strip().lower()
+    metode = METODE
 
     # FR-03: tolak input tak valid sebelum RPC.
     if not player_id:
@@ -143,8 +194,6 @@ def topup():
         return jsonify({"error": "Game tidak dikenal."}), 400
     if nominal is None:
         return jsonify({"error": "Nominal tidak tersedia untuk game ini."}), 400
-    if metode not in ALLOWED_METHODS:
-        return jsonify({"error": "Metode pembayaran tidak didukung."}), 400
 
     amount = int(nominal["amount"])
     order_id = make_order_id()

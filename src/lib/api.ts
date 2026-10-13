@@ -46,11 +46,30 @@ export async function fetchOrders(): Promise<{ orders: Order[] }> {
   return json(res);
 }
 
+export interface SaldoPackage {
+  id: string
+  label: string
+  amount: number
+}
+
+export async function fetchBalance(): Promise<{ balance: number; packages: SaldoPackage[] }> {
+  const res = await fetch("/api/balance");
+  return json(res);
+}
+
+export async function postSaldoTopup(package_id: string, metode: string): Promise<{ status: string; balance: number; metode?: string; message: string }> {
+  const res = await fetch("/api/saldo/topup", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ package_id, metode }),
+  });
+  return json(res);
+}
+
 export async function postTopup(payload: {
   game_id: string;
   nominal_id: string;
   player_id: string;
-  metode: string;
 }): Promise<Order> {
   const res = await fetch("/api/topup", {
     method: "POST",

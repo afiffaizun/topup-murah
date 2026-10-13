@@ -5,6 +5,12 @@ untuk praktikum Sistem Terdistribusi. Jalur kritis **pembayaran lewat RPC sinkro
 jalur pendukung **notifikasi, update stok, dan laporan keuangan lewat Message Queue asinkron**.
 Seluruh sistem berjalan dengan **satu perintah Docker Compose**.
 
+**Model pembayaran: saldo dompet.** Semua pembelian item dipotong dari satu saldo demo
+(awal **Rp 150.000**, tersimpan di `payment_service`). Saldo kurang → transaksi `FAILED`;
+tambah saldo dulu lewat **popup Isi Saldo** (tombol **Top Up** di navbar): pilih paket
+Rp 10rb–200rb, pilih e-wallet (QRIS/GoPay/OVO/DANA/ShopeePay), saldo masuk instan
+(simulasi — e-wallet hanya dicatat, tanpa biaya).
+
 ## Arsitektur
 
 ```
@@ -19,13 +25,14 @@ Browser :3000 (nginx + React)
 
 | Layanan | Alamat | Keterangan |
 |---|---|---|
-| Website | http://localhost:3000 | Form top-up + katalog + riwayat order |
+| Website | http://localhost:3000 | Form top-up + katalog + riwayat order (isi saldo via popup) |
 | Order API | http://localhost:5000/api/health | Cek kesehatan (`{"status":"ok"}`) |
+| Saldo API | http://localhost:5000/api/balance | Saldo + paket isi saldo (`{"balance":...,"packages":[...]}`) |
 | RabbitMQ Dashboard | http://localhost:15672 | Login `guest` / `guest` |
-| Payment RPC | port 8000, internal Docker saja | Tidak dibuka ke host |
+| Payment RPC | port 8000, internal Docker saja | `validate_payment` + `get_balance` + `topup_saldo`; tidak dibuka ke host |
 
 Kontrak event `order.paid` (hanya dikirim bila SUCCESS):
-`event, order_id (8 karakter), game, item, package, player_id, amount (dari katalog server), metode`.
+`event, order_id (8 karakter), game, item, package, player_id, amount (dari katalog server), metode ("saldo")`.
 
 ## Prasyarat
 
@@ -41,14 +48,15 @@ docker compose up --build
 Tunggu sampai RabbitMQ berstatus `healthy` dan semua container `Up`
 (cek dengan `docker compose ps`). Lalu:
 
-1. Buka http://localhost:3000
-2. Isi form: **Pilih Game → Player ID → Pilih Nominal → Pembayaran → Bayar**
+1. Buka http://localhost:3000 (saldo awal Rp 150.000 tampil di navbar)
+2. Isi form: **Pilih Game → Player ID → Pilih Nominal → Bayar** (otomatis pakai saldo)
 3. Hasil langsung tampil di form:
-   - `SUCCESS` — pembayaran berhasil, event terkirim ke 3 consumer
-   - `FAILED` — pembayaran ditolak (`Saldo tidak cukup`), tanpa pesan ke queue
+   - `SUCCESS` — pembayaran berhasil, saldo terpotong, event terkirim ke 3 consumer
+   - `FAILED` — saldo tidak cukup (`Saldo tidak cukup. Top up saldo terlebih dahulu.`), tanpa pesan ke queue
    - `ERROR` — layanan pembayaran tak terjangkau
-   - `SUCCESS (event tertunda)` — bayar berhasil tapi RabbitMQ gagal
-4. Lihat transaksi di tabel **Transaksi Terakhir** (waktu, order ID, item, status)
+   - `SUCCESS (event tertunda)` — bayar berhasil tapi RabbitMQ gagal (saldo tetap terpotong)
+4. Saldo habis? Klik **Top Up** di navbar (popup): pilih paket → pilih e-wallet → **Tambah Saldo** (saldo navbar ikut bertambah)
+5. Lihat transaksi di tabel **Transaksi Terakhir** (waktu, order ID, item, status)
 
 Berhenti dan bersihkan:
 
@@ -62,11 +70,11 @@ Jalankan `docker compose up --build` dari kondisi bersih, lalu:
 
 | No | Perintah | Hasil yang diharapkan |
 |---|---|---|
-| 1 | Transaksi normal | `SUCCESS`; ketiga consumer mencetak log; 1 baris baru di `logs/laporan_keuangan.log` |
-| 2 | Ulangi transaksi ±10x | Sesekali `FAILED` (`Saldo tidak cukup`); tidak ada pesan baru di queue |
+| 1 | Transaksi normal (saldo cukup) | `SUCCESS`, saldo berkurang; ketiga consumer mencetak log; 1 baris baru di `logs/laporan_keuangan.log` |
+| 2 | Beli nominal termahal (mis. Genshin 2240 Crystal Rp 479.000) | `FAILED` (`Saldo tidak cukup...`); tidak ada pesan baru di queue; saldo tidak berubah |
 | 3 | `docker compose stop consumer_stok` → transaksi → `docker compose start consumer_stok` | Pesan tidak dikirim ulang (queue non-persistent) |
-| 4 | `docker compose stop payment_service` → transaksi | Pesan ramah di web; status `ERROR` di riwayat |
-| 5 | `docker compose stop rabbitmq` → transaksi | Status `SUCCESS (event tertunda)` |
+| 4 | `docker compose stop payment_service` → transaksi / isi saldo | Pesan ramah di web; status `ERROR` di riwayat |
+| 5 | `docker compose stop rabbitmq` → transaksi | Status `SUCCESS (event tertunda)`, saldo tetap terpotong |
 
 Melihat log tiap service:
 
@@ -86,17 +94,34 @@ cat logs/laporan_keuangan.log
 
 ```
 src/                          # Frontend React (Vite + Tailwind + shadcn/ui)
-  sections/                   # Header, Hero (form transaksi), GameCatalog, OrderHistory, HowTo, Footer
-  lib/api.ts                  # Klien fetch /api
+  sections/                   # Header (saldo live + tombol Top Up), Hero (form bayar pakai saldo),
+                              # GameCatalog, SaldoModal (popup isi saldo + pilih e-wallet),
+                              # OrderHistory, HowTo, Footer
+  lib/api.ts                  # Klien fetch /api (catalog, balance, topup, saldo, orders)
 backend/
   order_app/                  # Flask API + klien RPC + publisher MQ (app.py, Dockerfile)
-  payment_service/            # XML-RPC validate_payment (server.py, Dockerfile)
+  payment_service/            # XML-RPC + pemegang saldo: validate_payment, get_balance,
+                              # get_paket_saldo, topup_saldo(package_id, metode) (server.py, Dockerfile)
   consumers/                  # notifikasi.py, stok.py, laporan.py (+ common.py, Dockerfile)
 docker-compose.yml            # 7 service
 nginx.conf                    # Serve dist + proxy /api ke order_app
 Dockerfile.frontend           # Build frontend → nginx
 logs/                         # Output laporan_keuangan.log (dibuat saat runtime)
 ```
+
+## Deviasi dari PRD Awal
+
+Atas permintaan pemilik produk, pembayaran disederhanakan menjadi **saldo tunggal**:
+
+- Pembelian item hanya pakai `metode: "saldo"` (e-wallet tidak berlaku untuk beli item).
+- E-wallet (QRIS/GoPay/OVO/DANA/ShopeePay) hidup lagi **khusus untuk isi saldo**:
+  `POST /api/saldo/topup` wajib menyertakan `metode`; gagal 400 bila kosong/tak didukung.
+  Pengisian instan (simulasi, e-wallet hanya dicatat di pesan hasil, tanpa biaya/admin).
+- FR-06 (acak 90/10) → dihapus; `FAILED "Saldo tidak cukup"` kini **deterministik** (saldo &lt; harga).
+- Skenario uji no. 2 menyesuaikan: bukan pengulangan acak, melainkan pembelian melebihi saldo.
+- Endpoint tambahan di luar PRD: `GET /api/balance`, `POST /api/saldo/topup`;
+  fungsi RPC tambahan: `get_balance`, `get_paket_saldo`, `topup_saldo`.
+- Batasan lab tetap: saldo/riwayat/stok di memori (hilang saat container restart).
 
 ## Troubleshooting
 

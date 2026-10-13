@@ -4,6 +4,7 @@ import { Header } from '@/sections/Header'
 import { HowTo } from '@/sections/HowTo'
 import { Hero } from '@/sections/Hero'
 import { OrderHistory } from '@/sections/OrderHistory'
+import { SaldoModal } from '@/sections/SaldoModal'
 
 export default function App() {
   return (
@@ -16,6 +17,7 @@ export default function App() {
         <HowTo />
       </main>
       <Footer />
+      <SaldoModal />
     </>
   )
 }
