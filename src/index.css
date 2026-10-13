@@ -1,0 +1,100 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+:root {
+  --ink: #141b2b;
+  --background: #f9f9ff;
+  --foreground: #141b2b;
+  --card: #ffffff;
+  --card-foreground: #141b2b;
+  --popover: #ffffff;
+  --popover-foreground: #141b2b;
+  --primary: #ffde59;
+  --primary-foreground: #141b2b;
+  --secondary: #00d2ff;
+  --secondary-foreground: #141b2b;
+  --muted: #e1e8fd;
+  --muted-foreground: #4c4735;
+  --accent: #ffde59;
+  --accent-foreground: #141b2b;
+  --destructive: #bd0042;
+  --border: #141b2b;
+  --input: #141b2b;
+  --ring: #141b2b;
+  --radius: 0.25rem;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  /* Design tokens dari DESIGN.md */
+  --color-ink: #141b2b;
+  --color-surface: #f9f9ff;
+  --color-surface-low: #f1f3ff;
+  --color-surface-lowest: #ffffff;
+  --color-surface-high: #e1e8fd;
+  --color-on-surface-variant: #4c4735;
+  --color-outline-variant: #cfc6af;
+  --color-pop-yellow: #ffde59;
+  --color-pop-yellow-soft: #ffe16e;
+  --color-pop-cyan: #00d2ff;
+  --color-pop-cyan-soft: #b6ebff;
+  --color-pop-cyan-ink: #004e60;
+  --color-pop-magenta: #bd0042;
+  --color-pop-magenta-ink: #ffffff;
+  --color-pop-teal: #00677f;
+  --color-pop-gold: #705d00;
+
+  --radius-sm: 0.125rem;
+  --radius-md: 0.25rem;
+  --radius-lg: 0.25rem;
+  --radius-xl: 0.5rem;
+
+  --font-display: "Bricolage Grotesque", ui-sans-serif, system-ui, sans-serif;
+  --font-body: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+
+  --shadow-ink-sm: 2px 2px 0 var(--ink);
+  --shadow-ink: 3px 3px 0 var(--ink);
+  --shadow-ink-md: 4px 4px 0 var(--ink);
+  --shadow-ink-lg: 6px 6px 0 var(--ink);
+}
+
+@layer base {
+  * { border-color: var(--ink); }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-body);
+    font-size: 15px;
+    line-height: 22px;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1, h2, h3, h4 { font-family: var(--font-display); }
+}
+
+@layer utilities {
+  .halftone {
+    background-image: radial-gradient(#141b2b 1.5px, transparent 1.5px);
+    background-size: 16px 16px;
+  }
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { scrollbar-width: none; }
+}
